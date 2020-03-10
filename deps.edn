@@ -1,0 +1,11 @@
+{:paths   ["src/main"]
+ :deps    {edn-query-language/eql   {:mvn/version "0.0.9"}
+           ubergraph                {:mvn/version "0.8.2"}
+           io.pedestal/pedestal.log {:mvn/version "0.5.7"}
+
+           br.com.souenzzo/eql-as   {:git/url "https://github.com/souenzzo/eql-as.git"
+                                     :sha     "e59e457c77603384276d67ed446c2d1cbc8cab85"}}
+ :aliases {:dev {:extra-paths ["src/test"]
+                 :extra-deps  {org.clojure/clojure    {:mvn/version "1.10.1"}
+                               midje/midje            {:mvn/version "1.9.9"}
+                               org.clojure/test.check {:mvn/version "0.10.0"}}}}}
