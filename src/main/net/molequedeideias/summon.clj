@@ -3,9 +3,10 @@
             [ubergraph.alg :as uber.alg]
             [ubergraph.core :as uber]
             [clojure.spec.alpha :as s]
-            [io.pedestal.log :as log]
             [edn-query-language.core :as eql])
-  (:import (java.time Instant Duration)))
+  (:import (java.time Instant Duration Clock)))
+
+(set! *warn-on-reflection* true)
 
 (s/def ::driver qualified-keyword?)
 (s/def ::drivers (s/map-of ::driver ::driver-impl))
@@ -171,7 +172,7 @@
     (map-select-from-ast ast data)))
 
 (defn start-el
-  [{::keys [drivers]
+  [{::keys [drivers stats clock]
     :as    env}
    {::keys [input output driver requires provides id start] :as element}]
   (let [input-selection (eql-as/ident-query {::eql-as/as-map requires
@@ -184,30 +185,46 @@
                         env)
         start (or start
                   (::start (get drivers driver))
-                  (throw (-> (if driver
-                               (str "Can't find start function on driver " (pr-str driver) " required by element " (pr-str id))
-                               (str "Can't find start function on element " (pr-str id)))
-                             (ex-info (dissoc element ::start))
-                             (throw))))
-        pre-start (Instant/now)
-        env-from-start (do
-                         (log/info :starting id :pre-start (str pre-start))
-                         (start env-for-start))
-        post-start (Instant/now)]
-    (log/info :started id
-              :duration (str (Duration/between pre-start post-start)))
+                  (throw (if element
+                           (-> (if driver
+                                 (str "Can't find start function on driver " (pr-str driver) " required by element " (pr-str id))
+                                 (str "Can't find start function on element " (pr-str id)))
+                               (ex-info (dissoc element ::start))
+                               (throw))
+                           (throw (ex-info "Element is nil" {::id id})))))
+        pre-start (Instant/now clock)
+        env-from-start (start env-for-start)
+        post-start (Instant/now clock)]
     (merge env
            (if provides
              (map-select env-from-start output-selection)
-             env-from-start))))
+             env-from-start)
+           {::stats (conj stats
+                          {::pre-start  pre-start
+                           ::id         id
+                           ::post-start post-start})})))
+
+
+(defn execute
+  [{::keys [elements
+            ids-in-start-order]
+    :as    system}]
+  (reduce start-el
+          system
+          (for [id ids-in-start-order]
+            (assoc (get elements id)
+              ::id id))))
 
 (defn start
-  ([system ids]
-   (let [elements (elements-for-start system ids)]
-     (log/info :starting-order (mapv ::id elements))
-     (reduce start-el
-             system
-             elements)))
+  ([{::keys [clock]
+     :as    system}
+    ids]
+   (-> system
+       (assoc
+         ::clock (or clock (Clock/systemUTC))
+         ::stats []
+         ::ids-in-start-order (map ::id (elements-for-start system ids)))
+       execute))
   ([{::keys [elements]
      :as    system}]
    (start system (keys elements))))

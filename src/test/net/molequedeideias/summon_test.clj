@@ -1,7 +1,16 @@
 (ns net.molequedeideias.summon-test
   (:require [clojure.test :refer [deftest]]
             [net.molequedeideias.summon :as summon]
-            [midje.sweet :refer [fact => contains just]]))
+            [midje.sweet :refer [fact => contains just]])
+  (:import (java.util Date)
+           (java.time Instant Duration)))
+
+(defn serial-clock
+  [inst ^Duration duration]
+  (let [current (atom inst)]
+    (proxy [java.time.Clock] []
+      (instant []
+        (swap! current #(.plus ^Instant % duration))))))
 
 (def simple-system
   {::entity-schema   {}
@@ -61,8 +70,30 @@
                              (update ::summon/elements dissoc ::event-conn-id)
                              (assoc ::event-conn {})))
     => [])
-  (let [{::keys [parser] :as system} (summon/start simple-system)]
+  (let [clock (serial-clock
+                (.toInstant #inst"2000")
+                (Duration/ofDays 1))
+        {::keys        [parser]
+         ::summon/keys [stats]
+         :as           system} (summon/start (assoc simple-system
+                                               ::summon/clock clock))]
     (fact
       "Check if parser is started"
       parser
-      => [{} {}])))
+      => [{} {}])
+    (fact
+      (map (juxt ::summon/id
+                 (comp #(Date/from %)
+                       ::summon/pre-start)
+                 (comp #(Date/from %)
+                       ::summon/post-start))
+           stats)
+      => [[::event-conn-id
+           #inst "2000-01-02"
+           #inst "2000-01-03"]
+          [::entity-conn-id
+           #inst "2000-01-04"
+           #inst "2000-01-05"]
+          [::parser
+           #inst "2000-01-06"
+           #inst "2000-01-07"]])))
