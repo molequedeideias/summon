@@ -101,7 +101,8 @@
 
 
 (def datascript-driver
-  (with-meta {::summon/input  [::schema]
+  (with-meta {::summon/driver ::datascript-driver
+              ::summon/input  [::schema]
               ::summon/output [::conn]}
              `{component/start ~(fn [{::keys [schema]
                                       :as    env}]
@@ -118,7 +119,8 @@
 
 
 (def pathom-driver
-  (with-meta {::summon/input  [::conn1
+  (with-meta {::summon/driver ::pathom-driver
+              ::summon/input  [::conn1
                                ::conn2]
               ::summon/output [::parser]}
              `{component/start ~(fn [{::keys [conn1 conn2]
