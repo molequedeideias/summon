@@ -3,7 +3,8 @@
             [ubergraph.alg :as uber.alg]
             [ubergraph.core :as uber]
             [clojure.spec.alpha :as s]
-            [edn-query-language.core :as eql])
+            [edn-query-language.core :as eql]
+            [com.stuartsierra.component :as component])
   (:import (java.time Instant Duration Clock)))
 
 (set! *warn-on-reflection* true)
@@ -259,3 +260,32 @@
   (reduce stop-el
           system
           (elements-for-stop system)))
+
+(defn select
+  [env aliases]
+  (into env
+        (map (fn [[k v]]
+               [k (get env v)]))
+        aliases))
+
+(defn start!
+  [env
+   {::keys [input output requires provides]
+    :as    component}]
+  (let [env-from-start (component/start (into component
+                                              (select env requires)))]
+
+    (vary-meta (into env (select env-from-start provides))
+               assoc `component/stop (fn [final-env]
+                                       (component/stop (into component
+                                                             (merge env env-from-start)))
+                                       (component/stop (into env final-env))))))
+
+(def system
+  (with-meta {}
+             `{component/start ~(fn [{::keys [targets]
+                                      :as    this}]
+                                  (let [els (elements-for-start this targets)]
+                                    (reduce start!
+                                            this
+                                            els)))}))
